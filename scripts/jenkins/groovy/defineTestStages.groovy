@@ -179,8 +179,8 @@ def call(final pipelineContext) {
   for (distribution in pipelineContext.getBuildConfig().getSupportedHadoopDistributions()) {
     HADOOP_STAGES += [
       stageName: "${distribution.name.toUpperCase()} ${distribution.version} Smoke", target: 'test-hadoop-smoke',
-      timeoutValue: 15, component: pipelineContext.getBuildConfig().COMPONENT_NONE,
-      additionalTestPackages: [pipelineContext.getBuildConfig().LANG_HADOOP, pipelineContext.getBuildConfig().LANG_PY],
+      timeoutValue: 15, component: pipelineContext.getBuildConfig().COMPONENT_ANY,
+      additionalTestPackages: [pipelineContext.getBuildConfig().COMPONENT_HADOOP, pipelineContext.getBuildConfig().COMPONENT_PY],
       customData: [distribution: distribution.name, version: distribution.version], pythonVersion: '2.7',
       executionScript: 'h2o-3/scripts/jenkins/groovy/hadoopStage.groovy'
     ]

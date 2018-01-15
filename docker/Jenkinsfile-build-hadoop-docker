@@ -1,66 +1,115 @@
 #! /usr/bin/groovy
 
-def final NODE_LABEL = 'docker && !mr-0xc8'
+final String NODE_LABEL = 'docker && !mr-0xc8'
 final String DOCKER_STASH = 'h2o-3-hadoop-docker-stash'
+final String REGISTRY_PREFIX = "${params.dockerRegistry}"
+final String IMAGE_NAME_PREFIX = "opsh2oai/h2o-3-hadoop"
 
+def pipelineContext = null
+String version = null
 
 properties(
     [
         parameters(
             [
                 string(defaultValue: 'master', description: 'Branch to checkout', name: 'gitBranch'),
-                string(name: 'dockerRegistry', defaultValue: 'docker.h2o.ai')
+                string(name: 'dockerRegistry', defaultValue: 'docker.h2o.ai'),
+                booleanParam(name: 'force', defaultValue: false, description: 'If false and image with version specified by BuildConfig exists in repository, then the build fails.')
             ]
         )
     ]
 )
 
-final GString IMAGE_NAME_PREFIX = "${params.dockerRegistry}/opsh2oai/h2o-3-hadoop"
-
-def distributionsToBuild = []
-
 node (NODE_LABEL) {
-    stage ('Checkout') {
-        git credentialsId: 'c6bab81a-6bb5-4497-9ec9-285ef5db36ea',
+    final String stageName = 'Checkout and Prepare'
+    stage (stageName) {
+        def scmEnv = git credentialsId: 'c6bab81a-6bb5-4497-9ec9-285ef5db36ea',
                 poll: false,
                 url: 'https://github.com/h2oai/h2o-3',
                 branch: params.gitBranch
-        stash name: DOCKER_STASH, includes: 'docker/hadoop/**,docker/scripts/*', allowEmpty: false
-    }
 
+        def pipelineContextFactory = load('scripts/jenkins/groovy/pipelineContext.groovy')
+        pipelineContext = pipelineContextFactory('.', 'MODE_HADOOP', scmEnv, true)
 
-    stage ('Read Supported Hadoop Versions') {
-        def readSupportedHadoopVersions = load('scripts/jenkins/groovy/readSupportedHadoopVersions.groovy')
-        distributionsToBuild = readSupportedHadoopVersions('h2o-dist/buildinfo.json')
+        try {
+            version = pipelineContext.getBuildConfig().getHadoopImageVersion()
+            currentBuild.displayName += " v${version}"
+
+            pipelineContext.getBuildSummary().addStageSummary(this, stageName, '')
+            pipelineContext.getBuildSummary().setStageDetails(this, stageName, env.NODE_NAME, env.WORKSPACE)
+
+            pipelineContext.getBuildSummary().addSection(this, 'docker-details', "<a href=\"${currentBuild.rawBuild.getAbsoluteUrl()}\" style=\"color: black;\">Details</a>", """
+                <ul>
+                <li><strong>Git Branch:</strong> ${env.BRANCH_NAME}</li>
+                <li><strong>Version:</strong> ${version}</li>
+                <li><strong>Force Overwrite:</strong> ${params.force}</li>
+                </ul>
+            """)
+
+            pipelineContext.getUtils().stashFiles(this, DOCKER_STASH, 'docker/hadoop/**,docker/scripts/*')
+
+            pipelineContext.getBuildSummary().markStageSuccessful(this, stageName)
+        } catch (Exception e) {
+            pipelineContext.getBuildSummary().markStageFailed(this, stageName)
+            throw e
+        }
     }
 }
 
-parallel(distributionsToBuild.collectEntries{distribution ->
+parallel(pipelineContext.getBuildConfig().getSupportedHadoopDistributions().collectEntries{distribution ->
     [
         "Build ${distribution.name.toUpperCase()} ${distribution.version}", {
-            node (NODE_LABEL) {
-                stage("Build ${distribution.name.toUpperCase()} ${distribution.version}") {
-                    withCredentials([usernamePassword(credentialsId: "${params.dockerRegistry}", usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
-                        unstash DOCKER_STASH
-                        sh """
-                        cd docker
-                        pwd
-                        ls -alh
-                        docker build \
-                            -t ${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}:${currentBuild.number} \
-                            -f hadoop/${distribution.name}/Dockerfile \
-                            --build-arg PATH_PREFIX=hadoop/${distribution.name} \
-                            --build-arg VERSION=${distribution.version} .
-                    """
+            node (pipelineContext.getBuildConfig().getDefaultNodeLabel()) {
+                final String buildStageName = "Build ${distribution.name.toUpperCase()} ${distribution.version}"
+                stage(buildStageName) {
+                    try {
+                        pipelineContext.getBuildSummary().addStageSummary(this, buildStageName, '')
+                        pipelineContext.getBuildSummary().setStageDetails(this, buildStageName, env.NODE_NAME, env.WORKSPACE)
+
+                        final String imageName = "${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}"
+                        final boolean conflict = pipelineContext.getUtils()
+                                .dockerImageExistsInRegistry(this, params.dockerRegistry, imageName, version)
+                        if (conflict && !params.force) {
+                            error "Tag ${imageName}:${version} already exists in the repository"
+                        }
+
+                        withCredentials([usernamePassword(credentialsId: "${params.dockerRegistry}", usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
+                            pipelineContext.getUtils().unstashFiles(this, DOCKER_STASH)
+                            sh """
+                                cd docker
+                                pwd
+                                ls -alh
+                                docker build \
+                                    -t ${REGISTRY_PREFIX}/${imageName}:${version} \
+                                    -f hadoop/${distribution.name}/Dockerfile \
+                                    --build-arg PATH_PREFIX=hadoop/${distribution.name} \
+                                    --build-arg VERSION=${distribution.version} .
+                            """
+                        }
+                        pipelineContext.getBuildSummary().markStageSuccessful(this, buildStageName)
+                    } catch (Exception e) {
+                        pipelineContext.getBuildSummary().markStageFailed(this, buildStageName)
+                        throw e
                     }
                 }
-                stage ("Publish ${distribution.name.toUpperCase()} ${distribution.version}") {
-                    withCredentials([usernamePassword(credentialsId: "${params.dockerRegistry}", usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
-                        sh """
-                          docker login -u $REGISTRY_USERNAME -p $REGISTRY_PASSWORD ${params.dockerRegistry}
-                          docker push ${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}:${currentBuild.number}
-                        """
-                        echo "###### Docker image ${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}:${currentBuild.number} built and pushed. ######"
+
+                final String publishStageName = "Publish ${distribution.name.toUpperCase()} ${distribution.version}"
+                stage (publishStageName) {
+                    try {
+                        pipelineContext.getBuildSummary().addStageSummary(this, publishStageName, '')
+                        pipelineContext.getBuildSummary().setStageDetails(this, publishStageName, env.NODE_NAME, env.WORKSPACE)
+
+                        withCredentials([usernamePassword(credentialsId: "${params.dockerRegistry}", usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
+                            sh """
+                                docker login -u $REGISTRY_USERNAME -p $REGISTRY_PASSWORD ${params.dockerRegistry}
+                                docker push ${REGISTRY_PREFIX}/${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}:${version}
+                            """
+                            echo "###### Docker image ${IMAGE_NAME_PREFIX}-${distribution.name}-${distribution.version}:${version} built and pushed. ######"
+                        }
+                        pipelineContext.getBuildSummary().markStageSuccessful(this, publishStageName)
+                    } catch (Exception e) {
+                        pipelineContext.getBuildSummary().markStageFailed(this, publishStageName)
+                        throw e
                     }
                 }
             }

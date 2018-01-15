@@ -1,6 +1,6 @@
-def call(final context, final String mode, final String commitMessage, final List<String> changes, final boolean ignoreChanges) {
+def call(final context, final String mode, final String commitMessage, final List<String> changes, final boolean ignoreChanges, final List<String> distributionsToBuild) {
   def buildConfig = new BuildConfig()
-  buildConfig.initialize(context, mode, commitMessage, changes, ignoreChanges)
+  buildConfig.initialize(context, mode, commitMessage, changes, ignoreChanges, distributionsToBuild)
   return buildConfig
 }
 
@@ -27,7 +27,8 @@ class BuildConfig {
   public static final String COMPONENT_JAVA = 'java'
   // Use to indicate, that the stage is not component dependent such as MOJO Compatibility Test,
   // always run
-  public static final String COMPONENT_ANY = 'none'
+  public static final String COMPONENT_ANY = 'any'
+  public static final String COMPONENT_HADOOP = 'hadoop'
 
   public static final String H2O_OPS_TOKEN = 'h2o-ops-personal-auth-token'
   private static final String COMMIT_STATE_PREFIX = 'H2O-3 Pipeline'
@@ -57,11 +58,11 @@ class BuildConfig {
   ]
 
   void initialize(final context, final String mode, final String commitMessage, final List<String> changes,
-                  final boolean ignoreChanges, final boolean buildHadoop, final List<String> distributionsToBuild) {
+                  final boolean ignoreChanges, final List<String> distributionsToBuild) {
     this.mode = mode
     this.nodeLabel = nodeLabel
     this.commitMessage = commitMessage
-    this.buildHadoop = buildHadoop
+    this.buildHadoop = mode == 'MODE_HADOOP'
     this.hadoopDistributionsToBuild = distributionsToBuild
     if (ignoreChanges) {
       markAllComponentsForTest()
@@ -114,7 +115,7 @@ class BuildConfig {
 
   List<String> getBuildEnv() {
     return [
-      "JAVA_VERSION=8",
+      'JAVA_VERSION=8',
       "BUILD_HADOOP=${buildHadoop}",
     ]
   }
@@ -140,6 +141,10 @@ class BuildConfig {
 
   String getDefaultImageVersion() {
     return DEFAULT_IMAGE_VERSION_TAG
+  }
+
+  String getHadoopImageVersion() {
+    return HADOOP_IMAGE_VERSION_TAG
   }
 
   private void detectChanges(List<String> changes) {

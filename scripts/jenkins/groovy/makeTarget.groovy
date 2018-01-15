@@ -25,7 +25,8 @@ def call(body) {
   }
   config.h2o3dir = config.h2o3dir ?: 'h2o-3'
 
-  if (config.customBuildAction == null) {
+  String buildAction = config.customBuildAction
+  if (buildAction == null) {
     buildAction = """
       echo "Activating Python ${env.PYTHON_VERSION}"
       . /envs/h2o_env_python${env.PYTHON_VERSION}/bin/activate

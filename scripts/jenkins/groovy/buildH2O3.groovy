@@ -37,11 +37,11 @@ def call(final pipelineContext) {
               makefilePath = pipelineContext.getBuildConfig().MAKEFILE_PATH
             }
             if (pipelineContext.getBuildConfig().getBuildHadoop()) {
-              buildTarget {
+              makeTarget {
                 target = 'test-package-hadoop'
                 hasJUnit = false
                 archiveFiles = false
-                makefilePath = 'docker/Makefile.jenkins'
+                makefilePath = pipelineContext.getBuildConfig().MAKEFILE_PATH
               }
             }
             if (pipelineContext.getBuildConfig().componentChanged(pipelineContext.getBuildConfig().COMPONENT_JS)) {
