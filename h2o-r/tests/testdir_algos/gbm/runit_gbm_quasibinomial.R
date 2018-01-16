@@ -4,8 +4,8 @@ source("../../../scripts/h2o-r-test-setup.R")
 
 LogLikelihood<- function(beta, Y, X){
   pi<- plogis( X%*%beta )
-  pi[pi==0] <- .Machine$double.neg.eps
-  pi[pi==1] <- 1-.Machine$double.neg.eps
+  pi[pi==0] <- epsS
+  pi[pi==1] <- 1-epsS
   logLike<- sum( Y*log(pi)  + (1-Y)*log(1-pi)  )
   return(-logLike)
 }
@@ -15,8 +15,8 @@ LogLikelihood<- function(beta, Y, X){
 ######
 grad<- function(beta, Y, X){
   pi<- plogis( X%*%beta )        # P(Y|A,W)= expit(beta0 + beta1*X1+beta2*X2...)
-  pi[pi==0] <- .Machine$double.neg.eps        # for consistency with above
-  pi[pi==1] <- 1-.Machine$double.neg.eps
+  pi[pi==0] <- epsS        # for consistency with above
+  pi[pi==1] <- 1-epsS
   gr<- crossprod(X, Y-pi)        # gradient is -residual*covariates
   return(-gr)
 }
@@ -26,8 +26,9 @@ test.GBM.quasi_binomial <- function() {
   # First calculate paper version
   # From TLMSE paper (Estimating Effects on Rare Outcomes: Knowledge is Power, Laura B. Balzer, Mark J. van der Laan)
   # Example: Data generating experiment for Simulation 1
-  print("double neg eps on this machine is")
-  print(.Machine$double.neg.eps)
+  epsS <<- 0.000000000000002
+  print("double neg eps used in this test is")
+  print(epsS)
   set.seed(123)
   n=2500
   W1<- rnorm(n, 0, .25)
@@ -64,8 +65,8 @@ test.GBM.quasi_binomial <- function() {
   beta_h2o_1 = m_glm@model$coefficients
 
   h2o_glm_pred = plogis(X%*%beta_h2o_1)
-  h2o_glm_pred[h2o_glm_pred==0] <- .Machine$double.neg.eps
-  h2o_glm_pred[h2o_glm_pred==1] <- 1-.Machine$double.neg.eps
+  h2o_glm_pred[h2o_glm_pred==0] <- epsS
+  h2o_glm_pred[h2o_glm_pred==1] <- 1-epsS
 
   betas = cbind(beta,beta_h2o_1)
   colnames(betas) <- c("R","H2O-GLM")
@@ -87,8 +88,8 @@ test.GBM.quasi_binomial <- function() {
                   stopping_rounds=10,stopping_tolerance=0)
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred0 = as.data.frame(h2o.predict(m_gbm0, as.h2o(X))[,3])
-  h2o_gbm_pred0[h2o_gbm_pred0==0] <- .Machine$double.neg.eps
-  h2o_gbm_pred0[h2o_gbm_pred0==1] <- 1-.Machine$double.neg.eps
+  h2o_gbm_pred0[h2o_gbm_pred0==0] <- epsS
+  h2o_gbm_pred0[h2o_gbm_pred0==1] <- 1-epsS
   l2 <- -sum( Y.tilde*log(h2o_gbm_pred0)  + (1-Y.tilde)*log(1-h2o_gbm_pred0) )
   #l2 <- -sum( Y*log(h2o_gbm_pred0)  + (1-Y)*log(1-h2o_gbm_pred0) )
 
@@ -104,8 +105,8 @@ test.GBM.quasi_binomial <- function() {
                   stopping_rounds=10,stopping_tolerance=0)
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred1 = as.data.frame(h2o.predict(m_gbm1, as.h2o(X))[,3])
-  h2o_gbm_pred1[h2o_gbm_pred1==0] <- .Machine$double.neg.eps
-  h2o_gbm_pred1[h2o_gbm_pred1==1] <- 1-.Machine$double.neg.eps
+  h2o_gbm_pred1[h2o_gbm_pred1==0] <- epsS
+  h2o_gbm_pred1[h2o_gbm_pred1==1] <- 1-epsS
   l3 <- -sum( Y.tilde*log(h2o_gbm_pred1)  + (1-Y.tilde)*log(1-h2o_gbm_pred1) )
   #l3 <- -sum( Y*log(h2o_gbm_pred1)  + (1-Y)*log(1-h2o_gbm_pred1) )
 
@@ -116,8 +117,8 @@ test.GBM.quasi_binomial <- function() {
 
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred = as.data.frame(h2o.predict(m_gbm, as.h2o(X))[,3])
-  h2o_gbm_pred[h2o_gbm_pred==0] <- .Machine$double.neg.eps
-  h2o_gbm_pred[h2o_gbm_pred==1] <- 1-.Machine$double.neg.eps
+  h2o_gbm_pred[h2o_gbm_pred==0] <- epsS
+  h2o_gbm_pred[h2o_gbm_pred==1] <- 1-epsS
   l4 <- -sum( Y.tilde*log(h2o_gbm_pred)  + (1-Y.tilde)*log(1-h2o_gbm_pred)  )
   #l4 <- -sum( Y*log(h2o_gbm_pred)  + (1-Y)*log(1-h2o_gbm_pred)  )
 
