@@ -1,11 +1,13 @@
 setwd(normalizePath(dirname(R.utils::commandArgs(asValues=TRUE)$"f")))
 source("../../../scripts/h2o-r-test-setup.R")
-
+epsDiff <- 1e-20 # check use to compare 0 and 1 to
 
 LogLikelihood<- function(beta, Y, X){
   pi<- plogis( X%*%beta )
-  pi[pi==0] <- epsS
-  pi[pi==1] <- 1-epsS
+  if (sum(abs(pi)<epsDiff) > 0)  # replace 0 with something slightly > 0 and 1 with something slightly < 1
+    pi[abs(pi)<epsDiff] <- epsS
+  if (sum(abs(pi-1)<epsDiff) > 0)
+    pi[abs(pi-1)<epsDiff] <- 1-epsS
   logLike<- sum( Y*log(pi)  + (1-Y)*log(1-pi)  )
   return(-logLike)
 }
@@ -15,8 +17,10 @@ LogLikelihood<- function(beta, Y, X){
 ######
 grad<- function(beta, Y, X){
   pi<- plogis( X%*%beta )        # P(Y|A,W)= expit(beta0 + beta1*X1+beta2*X2...)
-  pi[pi==0] <- epsS        # for consistency with above
-  pi[pi==1] <- 1-epsS
+  if (sum(abs(pi)<epsDiff) > 0)  # replace 0 with something slightly > 0 and 1 with something slightly < 1
+    pi[abs(pi)<epsDiff] <- epsS
+  if (sum(abs(pi-1)<epsDiff) > 0)
+    pi[abs(pi-1)<epsDiff] <- 1-epsS
   gr<- crossprod(X, Y-pi)        # gradient is -residual*covariates
   return(-gr)
 }
@@ -66,8 +70,10 @@ test.GBM.quasi_binomial <- function() {
   beta_h2o_1 = m_glm@model$coefficients
 
   h2o_glm_pred = plogis(X%*%beta_h2o_1)
-  h2o_glm_pred[h2o_glm_pred==0] <- epsS
-  h2o_glm_pred[h2o_glm_pred==1] <- 1-epsS
+  if (sum(abs(h2o_glm_pred) < epsDiff) > 0)
+    h2o_glm_pred[abs(h2o_glm_pred) < epsDiff] <- epsS
+  if (sum(abs(h2o_glm_pred-1)<epsDiff) > 0)
+    h2o_glm_pred[abs(h2o_glm_pred-1)<epsDiff] <- 1-epsS
 
   betas = cbind(beta,beta_h2o_1)
   colnames(betas) <- c("R","H2O-GLM")
@@ -89,8 +95,10 @@ test.GBM.quasi_binomial <- function() {
                   stopping_rounds=10,stopping_tolerance=0)
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred0 = as.data.frame(h2o.predict(m_gbm0, as.h2o(X))[,3])
-  h2o_gbm_pred0[h2o_gbm_pred0==0] <- epsS
-  h2o_gbm_pred0[h2o_gbm_pred0==1] <- 1-epsS
+  if (sum(abs(h2o_gbm_pred0) < epsDiff) > 0)
+    h2o_gbm_pred0[abs(h2o_gbm_pred0) < epsDiff] <- epsS
+  if (sum(abs(h2o_gbm_pred0-1)<epsDiff) > 0)
+    h2o_gbm_pred0[abs(h2o_gbm_pred0-1)<epsDiff] <- 1-epsS
   l2 <- -sum( Y.tilde*log(h2o_gbm_pred0)  + (1-Y.tilde)*log(1-h2o_gbm_pred0) )
   #l2 <- -sum( Y*log(h2o_gbm_pred0)  + (1-Y)*log(1-h2o_gbm_pred0) )
 
@@ -106,8 +114,11 @@ test.GBM.quasi_binomial <- function() {
                   stopping_rounds=10,stopping_tolerance=0)
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred1 = as.data.frame(h2o.predict(m_gbm1, as.h2o(X))[,3])
-  h2o_gbm_pred1[h2o_gbm_pred1==0] <- epsS
-  h2o_gbm_pred1[h2o_gbm_pred1==1] <- 1-epsS
+
+  if (sum(abs(h2o_gbm_pred1) < epsDiff) > 0)
+    h2o_gbm_pred1[abs(h2o_gbm_pred1) < epsDiff] <- epsS
+  if (sum(abs(h2o_gbm_pred1-1)<epsDiff) > 0)
+    h2o_gbm_pred1[abs(h2o_gbm_pred1-1)<epsDiff] <- 1-epsS
   l3 <- -sum( Y.tilde*log(h2o_gbm_pred1)  + (1-Y.tilde)*log(1-h2o_gbm_pred1) )
   #l3 <- -sum( Y*log(h2o_gbm_pred1)  + (1-Y)*log(1-h2o_gbm_pred1) )
 
@@ -118,8 +129,10 @@ test.GBM.quasi_binomial <- function() {
 
   # compute negative log-likelihood for h2o gbm predictions
   h2o_gbm_pred = as.data.frame(h2o.predict(m_gbm, as.h2o(X))[,3])
-  h2o_gbm_pred[h2o_gbm_pred==0] <- epsS
-  h2o_gbm_pred[h2o_gbm_pred==1] <- 1-epsS
+  if (sum(abs(h2o_gbm_pred) < epsDiff) > 0)
+    h2o_gbm_pred[abs(h2o_gbm_pred) < epsDiff] <- epsS
+  if (sum(abs(h2o_gbm_pred-1) < epsDiff) > 0)
+    h2o_gbm_pred[abs(h2o_gbm_pred-1) < epsDiff] <- 1-epsS
   l4 <- -sum( Y.tilde*log(h2o_gbm_pred)  + (1-Y.tilde)*log(1-h2o_gbm_pred)  )
   #l4 <- -sum( Y*log(h2o_gbm_pred)  + (1-Y)*log(1-h2o_gbm_pred)  )
 
