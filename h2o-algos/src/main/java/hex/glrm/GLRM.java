@@ -637,7 +637,7 @@ public class GLRM extends ModelBuilder<GLRMModel, GLRMModel.GLRMParameters, GLRM
       ArrayUtils.mult(model._output._std_deviation, oneOverNobsm1);
       model._output._total_variance = dfcorr * dgram._gram.diagSum();
 
-      double maxSumVal = ArrayUtils.l2norm2(model._output._std_deviation);
+      double maxSumVal = ArrayUtils.l2norm(model._output._std_deviation);
       if (maxSumVal > model._output._total_variance) {  // scale output std to avoid cum std > 1
           double catScale = Math.sqrt(model._output._total_variance/maxSumVal);
           ArrayUtils.mult(model._output._std_deviation, catScale);
