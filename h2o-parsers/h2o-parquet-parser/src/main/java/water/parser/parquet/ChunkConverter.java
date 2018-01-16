@@ -1,6 +1,7 @@
 package water.parser.parquet;
 
 import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.example.data.simple.NanoTime;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.api.Converter;
 import org.apache.parquet.io.api.GroupConverter;
@@ -9,6 +10,8 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
+import org.joda.time.DateTimeUtils;
+import org.joda.time.Instant;
 import water.fvec.Vec;
 import water.parser.BufferedString;
 import water.parser.ParseWriter;
@@ -70,7 +73,7 @@ class ChunkConverter extends GroupConverter {
       case Vec.T_STR:
       case Vec.T_UUID:
       case Vec.T_TIME:
-        if (parquetType.getOriginalType() == OriginalType.TIMESTAMP_MILLIS) {
+        if (OriginalType.TIMESTAMP_MILLIS.equals(parquetType.getOriginalType()) || parquetType.getPrimitiveTypeName().equals(PrimitiveType.PrimitiveTypeName.INT96)) {
           return new TimestampConverter(colIdx, _writer);
         } else {
           boolean dictSupport = parquetType.getOriginalType() == OriginalType.UTF8 || parquetType.getOriginalType() == OriginalType.ENUM;
@@ -168,6 +171,9 @@ class ChunkConverter extends GroupConverter {
 
   private static class TimestampConverter extends PrimitiveConverter {
 
+    private static final int NANOS_IN_MILLISECOND = 1000000;
+    private static final double JULIAN_CALENDAR_INTEGER_ROUNDUP = 0.5D;
+
     private final int _colIdx;
     private final WriterDelegate _writer;
 
@@ -179,6 +185,15 @@ class ChunkConverter extends GroupConverter {
     @Override
     public void addLong(long value) {
       _writer.addNumCol(_colIdx, value, 0);
+    }
+
+    @Override
+    public void addBinary(Binary value) {
+      final NanoTime nanoTime = NanoTime.fromBinary(value);
+      final long millisecondsToMidnight = DateTimeUtils.fromJulianDay(nanoTime.getJulianDay() - JULIAN_CALENDAR_INTEGER_ROUNDUP);
+      long millisecondsAfterMidnight =nanoTime.getTimeOfDayNanos() / NANOS_IN_MILLISECOND;
+      
+      _writer.addNumCol(_colIdx, millisecondsToMidnight + millisecondsAfterMidnight);
     }
   }
 
